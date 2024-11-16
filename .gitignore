@@ -1,14 +1,1 @@
-# Virtualenv directories
-venv/
-.env/
-.virtualenv/
-
-# Environment variables
-.env
-
-# Distribution / packaging
-build/
-dist/
-*.egg-info/
-*.egg
-*.whl
+.DS_Store

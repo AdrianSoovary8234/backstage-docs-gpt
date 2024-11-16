@@ -12,6 +12,7 @@ from pinecone import Pinecone, Index, ServerlessSpec
 from concurrent.futures import ThreadPoolExecutor
 
 
+
 # Load environment variables from .env file
 load_dotenv()
 
