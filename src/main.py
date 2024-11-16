@@ -9,6 +9,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pinecone import Pinecone, Index, ServerlessSpec
+from concurrent.futures import ThreadPoolExecutor
 
 
 # Load environment variables from .env file
@@ -57,9 +58,12 @@ def extract_main_content(url: str) -> str:
         response = requests.get(url)
         response.raise_for_status()
         page_soup = BeautifulSoup(response.content, "lxml")
-        main_content = page_soup.find("main").prettify()
-
-        return  get_semantic_content(main_content) if main_content else ""
+        main_content = page_soup.find("main")
+        if main_content:
+            main_content_pretty = main_content.prettify()
+            return  get_semantic_content(main_content_pretty) if main_content_pretty else ""
+        else:
+            return ""
     except requests.RequestException as e:
         print(f"Error fetching {url}: {e}")
         return ""
@@ -95,8 +99,23 @@ def handle_urls(urls: List[str]) -> None:
 
     index = pc.Index(index_name)
 
-    for url in urls:
-        print(f"Processing URL: {url}")
+    def process_single_url(url: str, idx: int) -> None:
+        print(f"Processing URL[{idx}]: {url}")
+        main_content = extract_main_content(url)
+        if main_content:
+            main_content_chunks = split_recursively(main_content)
+            embedded_chunks = embed_chunks(main_content_chunks)
+            store_embedding(embedded_chunks, index)
+        else:
+            print(f"No <main> content found for {url}.")
+
+    # concurrently process 5 urls at the same time. Limit to 5 to avoid rate limiting by OpenAI or Pinecone 
+    with ThreadPoolExecutor(max_workers=5) as executor:
+         for i, url in enumerate(urls):
+            executor.submit(process_single_url, url, i)
+
+    for i, url in enumerate(urls):
+        print(f"Processing URL[{i} / {urls.__len__()}]: {url}")
         main_content = extract_main_content(url)
         if main_content:
             main_content_chunks = split_recursively(main_content)
