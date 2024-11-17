@@ -1,7 +1,8 @@
 from typing import List
-from flask import Flask, Response, request
+from flask import Flask, Response, request, stream_with_context
 from openai import OpenAI
-import time
+import time 
+import json
 import os
 from dotenv import load_dotenv 
 from pinecone import Pinecone, Index,  ScoredVector
@@ -72,13 +73,14 @@ def build_user_prompt(query: str) -> dict:
     
 
 def stream_openai_response(query_string: str):
+    print('stream_openai_response start')
     embedded_query = get_embedding(query_string)
     vector_responses = get_most_relevant_context(embedded_query)
 
     system_prompt = build_system_prompt( vector_responses.matches)
     user_prompt = build_user_prompt(query_string)
-    
-
+    print('VETOR',vector_responses)
+    print('start prompting OAI')
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -90,13 +92,24 @@ def stream_openai_response(query_string: str):
         print("Starting OpenAI chat...")
         
         for chunk in response:
-            if "choices" in chunk:
-                delta = chunk["choices"][0]["delta"]
-                if "content" in delta:
-                    yield f"data: {delta['content']}\n\n"
+            # Convert the chunk to a dictionary
+            chunk_dict = chunk.to_dict()
+            # Serialize the dictionary to a JSON string
+            chunk_json = json.dumps(chunk_dict)
+            yield f'data: {chunk_json}\n\n'
+
+        yield 'data: [DONE]\n\n'
 
     except Exception as e:
-        yield f"data: [Error] {str(e)}\n\n"
+        error_response = {
+            "error": {
+                "message": str(e),
+                "type": "invalid_request_error",
+                "param": None,
+                "code": None
+            }
+        }
+        yield f'data: {json.dumps(error_response)}\n\n'
 
 
 @app.route('/ask', methods=['POST'])
@@ -109,8 +122,14 @@ def ask():
 
     if not query_string:
         return "No query provided", 400
-
-    return Response(stream_openai_response(query_string), content_type='text/event-stream')
+    print('start')
+    return Response(
+        stream_with_context(stream_openai_response(query_string)), 
+        mimetype='text/event-stream', 
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+        })
 
 if __name__ == "__main__":
     app.run(debug=True, threaded=True)
