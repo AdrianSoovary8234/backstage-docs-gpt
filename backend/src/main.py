@@ -96,9 +96,10 @@ def stream_openai_response(query_string: str):
             chunk_dict = chunk.to_dict()
             # Serialize the dictionary to a JSON string
             chunk_json = json.dumps(chunk_dict)
-            yield f'data: {chunk_json}\n\n'
+            yield chunk_json
+            # yield f'data: {chunk_json}\n\n'
 
-        yield 'data: [DONE]\n\n'
+        yield '[DONE]\n\n'
 
     except Exception as e:
         error_response = {
@@ -109,11 +110,13 @@ def stream_openai_response(query_string: str):
                 "code": None
             }
         }
-        yield f'data: {json.dumps(error_response)}\n\n'
+        yield json.dumps(error_response)
+        # yield f'data: {json.dumps(error_response)}\n\n'
 
 
 @app.route('/ask', methods=['POST'])
 def ask():
+    print('ask')
     data = request.get_json()
     if not data:
         return "No data provided", 400
